@@ -1,5 +1,4 @@
 # email-spam-predictor
-#
 to run:
 <br>
 1. clone repository
