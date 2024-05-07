@@ -6,3 +6,5 @@ to run:
 3. python3 server.py
 4. cd backend
 5. npm run start
+#
+Model still under training...
