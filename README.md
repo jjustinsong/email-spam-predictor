@@ -7,4 +7,4 @@ to run:
 4. cd backend
 5. npm run start
 #
-Model still under training...
+model still under training, not fully accurate as of yet.
