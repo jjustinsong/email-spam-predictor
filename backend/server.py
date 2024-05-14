@@ -16,6 +16,12 @@ CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 with open('./model/email_spam_predictor_new.sav', 'rb') as file:
     model = pickle.load(file)
 
+with open('./model/tfidf_vectorizer_subject.pkl', 'rb') as file:
+    tfidf_vectorizer_subject = pickle.load(file)
+
+with open('./model/tfidf_vectorizer_body.pkl', 'rb') as file:
+    tfidf_vectorizer_body = pickle.load(file)
+
 def extract_features(subject, body):
     def words_in_texts(words, texts):
         indicator_array = []
@@ -42,11 +48,8 @@ def extract_features(subject, body):
 
     input = pd.DataFrame({'id': [0], 'subject': [subject], 'body': [body]})
 
-    tfidf_vectorizer_subject = TfidfVectorizer()
-    tfidf_vectorizer_body = TfidfVectorizer()
-
-    X_subject_tfidf = tfidf_vectorizer_subject.fit_transform(input['subject'])
-    X_body_tfidf = tfidf_vectorizer_body.fit_transform(input['body'])
+    X_subject_tfidf = tfidf_vectorizer_subject.transform(input['subject'])
+    X_body_tfidf = tfidf_vectorizer_body.transform(input['body'])
 
     X_combined = hstack([X_subject_tfidf, X_body_tfidf])
 
