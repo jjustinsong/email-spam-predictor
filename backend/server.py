@@ -4,15 +4,19 @@ import os
 import numpy as np
 import pickle
 import pandas as pd
+import re
 
+from scipy.sparse import csr_matrix
+from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy.sparse import hstack
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
-with open('./model/email_spam_predictor.sav', 'rb') as file:
+with open('./model/email_spam_predictor_new.sav', 'rb') as file:
     model = pickle.load(file)
 
-def extract_features(subject, email):
+def extract_features(subject, body):
     def words_in_texts(words, texts):
         indicator_array = []
         for i in texts:
@@ -28,45 +32,42 @@ def extract_features(subject, email):
     def num_words(text):
         return len(text.split())
 
-    def cap_prop(text):
-        count = 0
-        for c in text:
-            if c.isupper():
-                count += 1
-        if count > 0:
-            return count/len(text)
-        else:
-            return 0
-
     def re_or_fw(text):
-        match = text.str.extract(r"(Fw:|Re:)")
-        return match[0].notna().astype(int)
+        match = re.search(r"(fw :|re :)", text)
+        return int(match is not None)
 
     def special_char(text):
-        match = text.str.extractall(r"([^\w ])")
-        counts = match.groupby(level=0).size()
-        return counts.reindex(text.index, fill_value=0)
+        match = re.findall(r"([^\w ])", text)
+        return len(match)
 
-    input = pd.DataFrame({'id': [0], 'subject': [subject], 'email': [email]})
-    input['e_num_words'] = input['email'].astype(str).apply(num_words)
-    input['s_num_words'] = input['subject'].astype(str).apply(num_words)
-    input['e_cap_prop'] = input['email'].astype(str).apply(cap_prop)
-    input['s_cap_prop'] = input['subject'].astype(str).apply(cap_prop)
-    input['re_or_fw'] = re_or_fw(input['subject'])
-    input['s_char'] = input['subject'].astype(str).apply(len)
-    input['e_char'] = input['email'].astype(str).apply(len)
-    input['e_special'] = special_char(input['email'])
-    input['s_special'] = special_char(input['subject'])
+    input = pd.DataFrame({'id': [0], 'subject': [subject], 'body': [body]})
 
-    words = ['html', 'body', 'font', 'click', 'href', 'please', 'offer']
-    word = pd.DataFrame(words_in_texts(words, input['email']))
-    word['id'] = input['id']
-    input = input.merge(word, on='id')
+    tfidf_vectorizer_subject = TfidfVectorizer()
+    tfidf_vectorizer_body = TfidfVectorizer()
 
-    input.columns = input.columns.astype(str)
-    input = input.iloc[:, 3:]
+    X_subject_tfidf = tfidf_vectorizer_subject.fit_transform(input['subject'])
+    X_body_tfidf = tfidf_vectorizer_body.fit_transform(input['body'])
 
-    return input
+    X_combined = hstack([X_subject_tfidf, X_body_tfidf])
+
+    body_num_words = np.array(input['body'].apply(num_words)).reshape(-1, 1)
+    subject_num_words = np.array(input['subject'].apply(num_words)).reshape(-1, 1)
+    re_or_fw_feature = np.array(input['subject'].astype(str).apply(re_or_fw)).reshape(-1, 1)
+    subject_char = np.array(input['subject'].apply(len)).reshape(-1, 1)
+    body_char = np.array(input['body'].apply(len)).reshape(-1, 1)
+    subject_special = np.array(input['subject'].astype(str).apply(special_char)).reshape(-1, 1)
+    body_special = np.array(input['body'].apply(special_char)).reshape(-1, 1)
+
+    words = ['offer', 'help', 'win', 'price', 'card']
+    subject_words_in_texts = words_in_texts(words, input['subject'])
+    body_words_in_texts = words_in_texts(words, input['body'])
+
+    subject_words_in_texts_sparse = csr_matrix(subject_words_in_texts)
+    body_words_in_texts_sparse = csr_matrix(body_words_in_texts)
+    
+    X_combined_new = hstack([X_combined, body_num_words, subject_num_words, re_or_fw_feature, subject_char, body_char, subject_special, body_special, subject_words_in_texts_sparse, body_words_in_texts_sparse])
+
+    return X_combined_new
 
 
 @app.route('/predict', methods=['POST'])
@@ -74,9 +75,9 @@ def predict():
     try:
         data = request.get_json()
         subject = data.get('subject', '')
-        email = data.get('email', '')
+        body = data.get('email', '')
 
-        features = extract_features(subject, email)
+        features = extract_features(subject, body)
 
         prediction = model.predict(features)[0]
         result = "SPAM" if prediction == 1 else "NOT SPAM"
