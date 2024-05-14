@@ -6,5 +6,3 @@ to run:
 3. python3 server.py
 4. cd backend
 5. npm run start
-#
-model still under training. currently trained on outdated dataset, so not accurate as of yet.
